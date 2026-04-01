@@ -1,0 +1,75 @@
+name: Daily Job Scrape
+
+on:
+  schedule:
+    # Runs every day at 08:00 UTC (05:00 Brasília time)
+    - cron: "0 8 * * *"
+  workflow_dispatch:   # also allows manual trigger from GitHub UI
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install package in editable mode
+        run: pip install -e .
+
+      # Restore the SQLite DB from the previous run (persisted as an artifact)
+      - name: Restore database
+        uses: actions/cache@v4
+        with:
+          path: data/jobs.db
+          key: jobs-db-${{ github.run_number }}
+          restore-keys: |
+            jobs-db-
+
+      - name: Run scraper
+        run: python runner.py
+
+      # Upload the updated DB so it persists across workflow runs
+      - name: Upload database artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jobs-db-${{ github.run_id }}
+          path: data/jobs.db
+          retention-days: 30
+
+      # Optional: export a CSV of today's new jobs as an artifact
+      - name: Export new jobs to CSV
+        run: |
+          python - <<'EOF'
+          import pandas as pd, json
+          from job_monitor.storage.db import init_db, load_jobs
+          from datetime import datetime, timedelta
+          init_db()
+          rows = load_jobs(since=datetime.utcnow() - timedelta(days=1), limit=500)
+          if rows:
+              df = pd.DataFrame(rows)
+              df["tags"] = df["tags"].apply(lambda v: ", ".join(json.loads(v)) if v else "")
+              df.drop(columns=["description","url_hash"], errors="ignore", inplace=True)
+              df.to_csv("data/new_jobs_today.csv", index=False)
+              print(f"Exported {len(df)} jobs")
+          else:
+              print("No new jobs today")
+          EOF
+
+      - name: Upload CSV artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: new-jobs-${{ github.run_id }}
+          path: data/new_jobs_today.csv
+          if-no-files-found: ignore
+          retention-days: 14
