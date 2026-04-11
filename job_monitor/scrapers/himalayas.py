@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Any
 
 from job_monitor.core.models import Job
 from job_monitor.scrapers.base import BaseScraper
 from job_monitor.config import TITLE_KEYWORDS
+
+logger = logging.getLogger(__name__)
 
 BASE_URL = "https://himalayas.app/jobs/api"
 SEARCH_URL = "https://himalayas.app/jobs/api/search"
@@ -30,9 +33,9 @@ class HimalayasScraper(BaseScraper):
                         jobs.append(job)
                         seen_urls.add(job.url)
             except Exception as exc:
-                print(f"[{self.source}] Error fetching keyword '{keyword}': {exc}")
+                logger.exception(f"[{self.source}] Error fetching keyword '{keyword}': {exc}")
 
-        print(f"[{self.source}] Fetched {len(jobs)} jobs")
+        logger.info(f"[{self.source}] Fetched {len(jobs)} jobs")
         return jobs
 
     # ------------------------------------------------------------------
@@ -51,7 +54,7 @@ class HimalayasScraper(BaseScraper):
                 posted_at=self._parse_date(raw.get("createdAt")),
             )
         except Exception as exc:
-            print(f"[{self.source}] Parse error: {exc} — raw keys: {list(raw.keys())}")
+            logger.warning(f"[{self.source}] Parse error: {exc} — raw keys: {list(raw.keys())}")
             return None
 
     @staticmethod
