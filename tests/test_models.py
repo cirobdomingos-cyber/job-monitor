@@ -35,30 +35,17 @@ def test_job_creation_with_all_fields():
 
 
 def test_job_defaults():
-    """fetched_at defaults to None; validator populates it when explicitly passed a falsy value."""
-    # When no value is provided, Pydantic v2 uses the field default without
-    # running the validator, so fetched_at stays None.
-    job_no_value = Job(
-        url="https://example.com/job/1",
-        title="Analyst",
-        company="TestCo",
-        source="himalayas",
-    )
-    assert job_no_value.fetched_at is None
-
-    # When explicitly passed None (or another falsy value), the validator
-    # fires and fills in utcnow.
+    """fetched_at is auto-populated via default_factory=datetime.utcnow."""
     before = datetime.utcnow()
-    job_explicit = Job(
+    job = Job(
         url="https://example.com/job/1",
         title="Analyst",
         company="TestCo",
         source="himalayas",
-        fetched_at=None,
     )
     after = datetime.utcnow()
-    assert job_explicit.fetched_at is not None
-    assert before <= job_explicit.fetched_at <= after
+    assert job.fetched_at is not None
+    assert before <= job.fetched_at <= after
 
 
 def test_job_tags_from_string():

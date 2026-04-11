@@ -138,14 +138,10 @@ def test_geo_excluded_us_only():
 
 
 def test_geo_excluded_uk_only():
-    """'uk only' is not in the configured exclusion list, so should NOT exclude.
-
-    The current GEO_EXCLUSIONS target US/NA restrictions only. A job that says
-    'uk only' passes through because it does not match any exclusion phrase.
-    """
+    """'uk only' in location IS geo-excluded — the filter correctly blocks
+    non-LATAM-accessible roles."""
     job = make_job(description="", location="UK Only")
-    # "uk only" is not in GEO_EXCLUSIONS — so this should NOT be excluded
-    assert is_geo_excluded(job) is False
+    assert is_geo_excluded(job) is True
 
 
 def test_geo_not_excluded_worldwide():
