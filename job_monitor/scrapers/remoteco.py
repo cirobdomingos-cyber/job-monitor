@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from datetime import datetime
 from typing import Optional
@@ -9,6 +10,8 @@ from bs4 import BeautifulSoup
 
 from job_monitor.core.models import Job
 from job_monitor.scrapers.base import BaseScraper
+
+logger = logging.getLogger(__name__)
 
 BASE_URL = "https://remote.co"
 
@@ -37,9 +40,9 @@ class RemoteCo_Scraper(BaseScraper):
                         jobs.append(job)
                         seen_urls.add(job.url)
             except Exception as exc:
-                print(f"[{self.source}] Error scraping '{path}': {exc}")
+                logger.exception(f"[{self.source}] Error scraping '{path}': {exc}")
 
-        print(f"[{self.source}] Fetched {len(jobs)} jobs")
+        logger.info(f"[{self.source}] Fetched {len(jobs)} jobs")
         return jobs
 
     # ------------------------------------------------------------------
@@ -108,7 +111,7 @@ class RemoteCo_Scraper(BaseScraper):
                 posted_at=posted_at,
             )
         except Exception as exc:
-            print(f"[{self.source}] Card parse error: {exc}")
+            logger.warning(f"[{self.source}] Card parse error: {exc}")
             return None
 
     # ------------------------------------------------------------------
