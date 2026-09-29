@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs ls:*)",
+      "Bash(find . -name \"*.py\" -type f -exec wc -l {} +)",
+      "Bash(grep -i \"specialist\" /c/repo/my-agents/agents/*.py)",
+      "Bash(xargs grep:*)",
+      "Read(//c/Users/cirob/AppData/Local/Temp/claude/c--repo-job-monitor/0a98ed52-9b92-47e4-b086-db7faebeb2a8/tasks/**)",
+      "Bash(grep -h \"return \\\\\".*Specialist\\\\|return \\\\\".*Researcher\\\\|return \\\\\".*Agent\\\\|return \\\\\".*Planner\\\\|return \\\\\".*Architect\\\\|return \\\\\".*Review\\\\|return \\\\\".*Intel\" /c/repo/my-agents/agents/*.py)",
+      "Bash(pip install:*)"
+    ]
+  }
+}

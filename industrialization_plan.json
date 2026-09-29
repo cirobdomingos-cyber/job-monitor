@@ -1,0 +1,183 @@
+{
+  "concept_ref": "job-monitor-industrialization-v1",
+  "maturity_baseline": "prototype",
+
+  "cicd": {
+    "strategy": "GitHub Actions mono-pipeline. Single workflow file with conditional stages triggered by push/PR/schedule. GitHub Actions is free for public repos, already integrated with GitHub, and Railway has native GitHub integration that auto-deploys on push to main.",
+    "stages": [
+      "lint (ruff check + ruff format --check)",
+      "type-check (mypy --strict job_monitor/)",
+      "test (pytest --cov=job_monitor --cov-report=xml)",
+      "coverage-gate (coverage report --fail-under=70)",
+      "security-scan (pip-audit + bandit -r job_monitor/ -ll)",
+      "deploy (Railway auto-deploy on push to main)"
+    ],
+    "gates": [
+      "All lint checks pass (ruff)",
+      "mypy returns 0 errors",
+      "pytest passes with >=70% coverage",
+      "No HIGH/CRITICAL findings from pip-audit",
+      "No HIGH findings from bandit"
+    ],
+    "tools": ["GitHub Actions", "ruff", "mypy", "pytest + pytest-cov", "pip-audit", "bandit", "Railway"],
+    "rollback_procedure": "Railway supports instant rollback to any previous deployment via dashboard or CLI. SQLite lives on a Railway volume so rollback only affects app code. For data rollback: delete jobs where fetched_at > rollback timestamp using runs table as audit trail."
+  },
+
+  "observability": {
+    "logging": "Replace all print() with Python stdlib logging. Structured JSON logging via logging.config.dictConfig() in job_monitor/logging_config.py. Module-level loggers: logger = logging.getLogger(__name__). JSON lines in production (python-json-logger), human-readable locally.",
+    "metrics": [
+      "jobs_fetched_total (by source, per run)",
+      "jobs_filtered_total (per run)",
+      "jobs_new_total (per run)",
+      "scraper_duration_seconds (by source)",
+      "scraper_error_count (by source)",
+      "score_distribution (histogram: 0-40, 40-60, 60-80, 80-100)",
+      "dedup_hit_rate (percentage already seen)"
+    ],
+    "slos": [
+      {"name": "freshness", "target": "New jobs appear within 2 hours of posting", "measurement": "max(posted_at - fetched_at)"},
+      {"name": "availability", "target": "Dashboard accessible 99% of time", "measurement": "Railway uptime"},
+      {"name": "scraper_success_rate", "target": "At least 3 of 5 scrapers succeed per run", "measurement": "scraper error count per run"},
+      {"name": "data_quality", "target": "Less than 5% filtered jobs have empty descriptions", "measurement": "COUNT(description='') / COUNT(*)"}
+    ],
+    "alerting": [
+      "All scrapers failed in a single run",
+      "Scraper success rate below 60% for 3 consecutive runs",
+      "Zero new jobs for 48 hours",
+      "pip-audit finds HIGH/CRITICAL CVE (weekly scan)"
+    ],
+    "dashboards": ["Pipeline Health tab in Streamlit: jobs per source, new jobs trend, scraper success rates, score distribution over time, last successful run per source"]
+  },
+
+  "testing_strategy": {
+    "pyramid": {
+      "unit": "40-50 tests: filters.py (matches_title, title_not_excluded, matches_keywords, is_geo_excluded), scorer.py (all _score_* functions, _parse_salary, _detect_currency), dedup._url_hash, models.Job validation",
+      "integration": "15-20 tests: DB operations (init_db, save_jobs, load_jobs, dedup), full filter pipeline, full scoring pipeline with tmp_path SQLite",
+      "e2e": "8-12 tests: scraper integration with mocked HTTP (responses library), full pipeline dry_run, retry on 429",
+      "load": "Deferred — SQLite handles current scale fine. Add EXPLAIN QUERY PLAN benchmarks if hitting 100k+ jobs."
+    },
+    "coverage_targets": {
+      "phase_1": "70% overall, 90% on core/",
+      "phase_2": "80% overall, 95% on core/"
+    },
+    "ai_evaluation": "Not applicable — scorer is rule-based and deterministic. Standard unit tests with exact assertions. Would switch to eval sets if adding LLM scoring layer."
+  },
+
+  "deployment": {
+    "model": "Single-service on Railway. Two processes: (1) Streamlit dashboard (always-on), (2) Scraper runner (GitHub Actions cron every 6h).",
+    "iac_tool": "Dockerfile (multi-stage, Python 3.12-slim) + railway.toml. No Terraform needed at this scale.",
+    "release_strategy": "Trunk-based development. Push to main = deploy. Feature branches + PRs for non-trivial changes. CI pipeline is the staging gate.",
+    "secrets_management": "Railway env vars for production. GitHub Actions secrets for CI. Local .env in .gitignore. No secrets vault needed — all scrapers use public APIs.",
+    "environment_parity": "Dockerfile ensures identical Python + deps between CI and prod. python-version: 3.12 in GitHub Actions matrix."
+  },
+
+  "data_governance": {
+    "lineage": "Add run_id FK to jobs table so every job traces to its pipeline run. Already have source field and runs table.",
+    "schema_versioning": "schema_version table + sequential migration SQL files in migrations/ folder. Formalize existing ad-hoc ALTER TABLE pattern.",
+    "pii_handling": "No PII collected. All data is public job postings. No GDPR/LGPD concerns.",
+    "model_versioning": "Add SCORER_VERSION constant in scorer.py, store in score_breakdown JSON. Enables re-scoring when weights change.",
+    "output_auditing": "Add total_scored, avg_score, duration_seconds columns to runs table."
+  },
+
+  "security": {
+    "scanning": ["pip-audit (weekly + every PR)", "bandit -r job_monitor/ -ll", "GitHub secret scanning (free for public repos)"],
+    "iam_approach": "No auth on dashboard — acceptable for read-only public job data. Add Streamlit password protection if needed later.",
+    "owasp_mitigations": [
+      "SQL injection: already mitigated — parameterized queries throughout",
+      "XSS: add html.escape() on rendered fields in dashboard (defense-in-depth over _strip_html)",
+      "SSRF: low risk — outbound requests to hardcoded domains only",
+      "Dependency confusion: pin exact versions with pip-compile"
+    ]
+  },
+
+  "cost_controls": {
+    "budget_alerts": "Railway free tier $5/month — set spending limit. GitHub Actions free for public repos (2000 min/month, pipeline uses ~5 min/run).",
+    "caching_strategy": "requests-cache for dev (avoid hitting APIs during testing). Production uses fresh data. st.cache_data(ttl=300) already handles dashboard caching.",
+    "model_tier_policy": "No AI/LLM models — scorer is pure Python. If adding LLM summarization later, use Haiku (cheapest). Rule-based scorer costs $0/month vs ~$150/month for LLM at scale."
+  },
+
+  "team_enablement": [
+    {"artifact": "pyproject.toml consolidation (ruff, mypy, pytest config)", "owner": "Ciro", "priority": "P0"},
+    {"artifact": "Makefile with lint/test/run/dashboard/check targets", "owner": "Ciro", "priority": "P0"},
+    {"artifact": "Pre-commit hooks (.pre-commit-config.yaml with ruff)", "owner": "Ciro", "priority": "P1"},
+    {"artifact": "CONTRIBUTING.md with setup instructions", "owner": "Ciro", "priority": "P1"},
+    {"artifact": "ADR for scoring algorithm (docs/adr/001-scoring-approach.md)", "owner": "Ciro", "priority": "P2"}
+  ],
+
+  "industrialization_phases": [
+    {
+      "phase": "Phase 1: Foundation",
+      "duration": "1 weekend (8-10 hours)",
+      "deliverables": [
+        "Consolidate config into pyproject.toml (ruff, mypy, pytest)",
+        "Add Makefile with standard targets",
+        "Replace all print() with logging module",
+        "Write unit tests for core/ (filters, scorer, models, dedup) — 45+ tests",
+        "Add .pre-commit-config.yaml with ruff hooks",
+        "Pin exact dependency versions with pip-compile",
+        "Add dev dependencies (pytest, pytest-cov, ruff, mypy, responses, pip-audit, bandit)"
+      ],
+      "must_complete_before_prod": true
+    },
+    {
+      "phase": "Phase 2: CI/CD + Deployment",
+      "duration": "1 evening (3-4 hours)",
+      "deliverables": [
+        "Create .github/workflows/ci.yml",
+        "Create Dockerfile (multi-stage, Python 3.12-slim)",
+        "Create railway.toml + Procfile",
+        "Deploy to Railway, verify dashboard",
+        "Add GitHub Actions cron for scraper (every 6h)"
+      ],
+      "must_complete_before_prod": true
+    },
+    {
+      "phase": "Phase 3: Observability + Data Governance",
+      "duration": "1 evening (2-3 hours)",
+      "deliverables": [
+        "Add run_id FK to jobs table + migration",
+        "Add SCORER_VERSION to score_breakdown",
+        "Add scraper timing metrics",
+        "Add Pipeline Health tab to dashboard",
+        "Add schema_version table + migration framework",
+        "Add html.escape() on dashboard rendered fields"
+      ],
+      "must_complete_before_prod": false
+    },
+    {
+      "phase": "Phase 4: Polish + Interview Readiness",
+      "duration": "1 evening (2-3 hours)",
+      "deliverables": [
+        "Integration tests with mocked HTTP (responses library)",
+        "Raise coverage gate to 80%",
+        "Add alerting on scraper failure",
+        "Write ADR for scoring algorithm",
+        "Update README with architecture diagram + deployment badge",
+        "Add --verbose flag for DEBUG logging"
+      ],
+      "must_complete_before_prod": false
+    }
+  ],
+
+  "production_checklist": [
+    "All print() replaced with logging calls",
+    "pyproject.toml contains all tool configuration",
+    "requirements.txt has pinned versions (no >= specifiers)",
+    ".env and *.db in .gitignore",
+    "GitHub Actions CI pipeline passes on main",
+    "Unit test coverage >= 70% overall, >= 90% on core/",
+    "mypy passes with zero errors",
+    "ruff check and ruff format pass clean",
+    "pip-audit reports no HIGH/CRITICAL vulnerabilities",
+    "bandit reports no HIGH findings",
+    "Dockerfile builds on Railway",
+    "Streamlit dashboard loads on Railway URL",
+    "Scraper cron has run successfully 3+ times",
+    "DB_PATH env var set in Railway",
+    "No hardcoded secrets in source code",
+    "All SQL uses parameterized queries",
+    "Dashboard escapes HTML in rendered fields",
+    "README has project description, setup, architecture overview",
+    "GitHub repo has CI status badge"
+  ]
+}

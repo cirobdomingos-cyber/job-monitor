@@ -1,0 +1,255 @@
+# =============================================================================
+# Job Monitor Profile: Senior Data Analyst — LATAM
+# =============================================================================
+# This profile targets senior data/analytics roles accessible from Brazil.
+# Copy this file and customize it for your own job search.
+
+name: "Senior Data Analyst — LATAM"
+
+# -----------------------------------------------------------------------------
+# Filters — control which jobs pass the pipeline
+# -----------------------------------------------------------------------------
+filters:
+  # Job title must contain at least ONE of these (case-insensitive)
+  title_keywords:
+    - "data analyst"
+    - "senior data analyst"
+    - "analytics engineer"
+    - "lead analyst"
+    - "data product"
+    - "product analyst"
+    - "analytics lead"
+    - "senior analyst"
+    - "business intelligence"
+    - "bi engineer"
+    - "analytics manager"
+    - "data product manager"
+
+  # Job is DROPPED if title contains ANY of these
+  title_exclusions:
+    - "intern"
+    - "internship"
+    - "junior"
+    - "jr."
+    - "entry level"
+    - "entry-level"
+    - "graduate"
+    - "apprentice"
+    - "trainee"
+    - "staff augmentation"
+
+  # Description/tags must contain at least ONE of these
+  body_keywords:
+    - "sql"
+    - "python"
+    - "databricks"
+    - "power bi"
+    - "powerbi"
+    - "tableau"
+    - "dbt"
+    - "analytics"
+    - "data pipeline"
+    - "spark"
+    - "looker"
+    - "metabase"
+    - "airflow"
+    - "bigquery"
+    - "snowflake"
+    - "redshift"
+    - "data warehouse"
+    - "data platform"
+    - "data modeling"
+    - "data model"
+
+  # Job is DROPPED if description/location contains ANY of these
+  geo_exclusions:
+    # US-only
+    - "us work authorization"
+    - "must be located in the us"
+    - "must reside in the us"
+    - "must be based in the us"
+    - "us only"
+    - "united states only"
+    - "must be authorized to work in the united states"
+    - "legally authorized to work in the us"
+    - "eligible to work in the us"
+    - "must be a us citizen"
+    - "us citizens only"
+    - "north america only"
+    - "canada or us only"
+    - "canada and us only"
+    - "remote - us"
+    - "remote (us)"
+    - "headquarters: remote (us)"
+    - "usa only"
+    - "us-based only"
+    - "open to us residents"
+    - "open to us applicants"
+    # Non-LATAM country restrictions
+    - "germany only"
+    - "uk only"
+    - "united kingdom only"
+    - "australia only"
+    - "india only"
+    - "china only"
+    - "france only"
+    - "netherlands only"
+    - "spain only"
+    - "poland only"
+    - "czech republic only"
+    - "romania only"
+    - "portugal only"
+    - "italy only"
+    - "sweden only"
+    - "norway only"
+    - "denmark only"
+    - "finland only"
+    - "israel only"
+    - "singapore only"
+    - "new zealand only"
+    - "south africa only"
+    - "nigeria only"
+    - "kenya only"
+    - "pakistan only"
+    - "philippines only"
+    - "ukraine only"
+    - "canada only"
+    - "eu only"
+    - "europe only"
+    - "emea only"
+    - "apac only"
+    - "asia only"
+
+# -----------------------------------------------------------------------------
+# Scoring — how jobs are ranked 0–100
+# -----------------------------------------------------------------------------
+scoring:
+  salary_min: 80000       # Target salary range lower bound (USD)
+  salary_max: 130000      # Target salary range upper bound (USD)
+
+  # Title seniority scoring: high=20pts, mid=10pts, unspecified=6pts
+  seniority_high:
+    - "senior"
+    - "lead"
+    - "staff"
+    - "principal"
+    - "head of"
+    - "director"
+  seniority_mid:
+    - "mid"
+    - "ii"
+    - "iii"
+    - "2"
+    - "3"
+    - "specialist"
+    - "experienced"
+
+  # Tech stack keywords and their weights (max total capped at stack_max_score)
+  stack_keywords:
+    python: 3
+    sql: 3
+    dbt: 3
+    databricks: 3
+    "power bi": 3
+    powerbi: 3
+    analytics: 2
+    "data modeling": 2
+    "data model": 2
+    snowflake: 2
+    bigquery: 2
+    spark: 2
+    airflow: 2
+    looker: 2
+    tableau: 2
+    redshift: 1
+    metabase: 1
+    "data warehouse": 1
+    "data platform": 1
+    "data pipeline": 1
+    aws: 1
+    gcp: 1
+    azure: 1
+    kafka: 1
+    pyspark: 2
+    mlflow: 1
+    streamlit: 2
+    fastapi: 2
+  stack_max_score: 25
+
+  # Location scoring: preferred=20pts, neutral=8pts, excluded=0pts, generic remote=14pts
+  location_preferred:
+    - "worldwide"
+    - "anywhere"
+    - "global"
+    - "latam"
+    - "latin america"
+    - "brazil"
+    - "brasil"
+    - "argentina"
+    - "uruguay"
+    - "colombia"
+    - "mexico"
+    - "chile"
+    - "peru"
+    - "south america"
+    - " americas"
+  location_neutral_regions:
+    - "europe"
+    - "emea"
+    - "apac"
+    - "asia"
+    - "africa"
+    - "oceania"
+    - "australia"
+    - "india"
+    - "uk only"
+    - "eu only"
+  location_excluded:
+    - "united states"
+    - "usa only"
+    - "us only"
+    - "north america only"
+
+  # Company signal keywords: high=3pts each, mid=1pt each (capped at 15)
+  company_high:
+    - "series b"
+    - "series c"
+    - "series d"
+    - "series e"
+    - "fintech"
+    - "saas"
+    - "b2b saas"
+    - "logistics tech"
+    - "logistics"
+    - "data platform"
+    - "data infrastructure"
+    - "analytics platform"
+    - "fully remote"
+    - "fully distributed"
+    - "remote-first"
+    - "distributed team"
+  company_mid:
+    - "startup"
+    - "scale-up"
+    - "scaleup"
+    - "growth stage"
+    - "series a"
+    - "financial services"
+    - "payments"
+    - "insurtech"
+    - "proptech"
+    - "e-commerce"
+    - "marketplace"
+    - "remote"
+
+# -----------------------------------------------------------------------------
+# Scrapers — which sources to enable
+# -----------------------------------------------------------------------------
+scrapers:
+  enabled:
+    himalayas: true
+    remotive: true
+    weworkremotely: true
+    remoteok: true
+    greenhouse: true
+    remoteco: false

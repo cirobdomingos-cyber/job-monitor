@@ -22,3 +22,13 @@ data/
 # OS
 .DS_Store
 Thumbs.db
+
+# Tool caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+*.db
+runner_output.txt

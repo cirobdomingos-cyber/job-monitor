@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Any
 
 from job_monitor.core.models import Job
 from job_monitor.scrapers.base import BaseScraper
+
+logger = logging.getLogger(__name__)
 
 BASE_URL = "https://remotive.com/api/remote-jobs"
 
@@ -35,9 +38,9 @@ class RemotiveScraper(BaseScraper):
                         jobs.append(job)
                         seen_urls.add(job.url)
             except Exception as exc:
-                print(f"[{self.source}] Error fetching category '{category}': {exc}")
+                logger.exception(f"[{self.source}] Error fetching category '{category}': {exc}")
 
-        print(f"[{self.source}] Fetched {len(jobs)} jobs")
+        logger.info(f"[{self.source}] Fetched {len(jobs)} jobs")
         return jobs
 
     # ------------------------------------------------------------------
@@ -56,7 +59,7 @@ class RemotiveScraper(BaseScraper):
                 posted_at=self._parse_date(raw.get("publication_date")),
             )
         except Exception as exc:
-            print(f"[{self.source}] Parse error: {exc}")
+            logger.warning(f"[{self.source}] Parse error: {exc}")
             return None
 
     @staticmethod

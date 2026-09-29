@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from email.utils import parsedate_to_datetime
 
@@ -7,6 +8,8 @@ import feedparser
 
 from job_monitor.core.models import Job
 from job_monitor.scrapers.base import BaseScraper
+
+logger = logging.getLogger(__name__)
 
 # Public RSS feeds — no auth needed, ToS-safe
 RSS_FEEDS = {
@@ -29,7 +32,7 @@ class WeWorkRemotelyScraper(BaseScraper):
             try:
                 feed = feedparser.parse(feed_url)
                 if feed.bozo and not feed.entries:
-                    print(f"[{self.source}] Failed to parse feed '{feed_name}': {feed.bozo_exception}")
+                    logger.warning(f"[{self.source}] Failed to parse feed '{feed_name}': {feed.bozo_exception}")
                     continue
                 for entry in feed.entries:
                     job = self._parse(entry)
@@ -37,9 +40,9 @@ class WeWorkRemotelyScraper(BaseScraper):
                         jobs.append(job)
                         seen_urls.add(job.url)
             except Exception as exc:
-                print(f"[{self.source}] Error fetching feed '{feed_name}': {exc}")
+                logger.exception(f"[{self.source}] Error fetching feed '{feed_name}': {exc}")
 
-        print(f"[{self.source}] Fetched {len(jobs)} jobs")
+        logger.info(f"[{self.source}] Fetched {len(jobs)} jobs")
         return jobs
 
     # ------------------------------------------------------------------
@@ -79,7 +82,7 @@ class WeWorkRemotelyScraper(BaseScraper):
                 posted_at=self._parse_date(entry.get("published")),
             )
         except Exception as exc:
-            print(f"[{self.source}] Parse error: {exc}")
+            logger.warning(f"[{self.source}] Parse error: {exc}")
             return None
 
     @staticmethod

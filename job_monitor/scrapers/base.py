@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 import time
 from abc import ABC, abstractmethod
 from typing import Optional
 
 import requests
+
+logger = logging.getLogger(__name__)
 
 from job_monitor.core.models import Job
 
@@ -55,7 +58,7 @@ class BaseScraper(ABC):
                 resp = self.session.get(url, params=params, timeout=15)
                 if resp.status_code == 429:
                     wait = backoff * attempt
-                    print(f"[{self.source}] Rate limited — waiting {wait}s …")
+                    logger.warning(f"[{self.source}] Rate limited — waiting {wait}s …")
                     time.sleep(wait)
                     continue
                 resp.raise_for_status()
@@ -65,6 +68,6 @@ class BaseScraper(ABC):
                 if attempt == retries:
                     raise
                 wait = backoff * attempt
-                print(f"[{self.source}] Request error ({exc}) — retry {attempt}/{retries} in {wait}s")
+                logger.warning(f"[{self.source}] Request error ({exc}) — retry {attempt}/{retries} in {wait}s")
                 time.sleep(wait)
         raise RuntimeError(f"[{self.source}] All {retries} retries exhausted for {url}")
