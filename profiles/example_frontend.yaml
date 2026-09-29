@@ -1,0 +1,133 @@
+# =============================================================================
+# Example Profile: Frontend Engineer — Europe
+# =============================================================================
+# This is an EXAMPLE showing how to customize the job monitor for a
+# completely different role. Copy and adapt for your own search.
+
+name: "Frontend Engineer — Europe"
+
+filters:
+  title_keywords:
+    - "frontend engineer"
+    - "front-end engineer"
+    - "frontend developer"
+    - "front-end developer"
+    - "react developer"
+    - "ui engineer"
+    - "web developer"
+    - "javascript engineer"
+
+  title_exclusions:
+    - "intern"
+    - "junior"
+    - "entry level"
+    - "trainee"
+
+  body_keywords:
+    - "react"
+    - "typescript"
+    - "javascript"
+    - "next.js"
+    - "nextjs"
+    - "vue"
+    - "angular"
+    - "css"
+    - "tailwind"
+    - "html"
+    - "webpack"
+    - "vite"
+    - "figma"
+    - "storybook"
+
+  geo_exclusions:
+    - "us only"
+    - "united states only"
+    - "us work authorization"
+    - "must be a us citizen"
+    - "australia only"
+    - "india only"
+    - "asia only"
+    - "apac only"
+
+scoring:
+  salary_min: 60000
+  salary_max: 100000
+
+  seniority_high:
+    - "senior"
+    - "lead"
+    - "staff"
+    - "principal"
+  seniority_mid:
+    - "mid"
+    - "ii"
+    - "iii"
+
+  stack_keywords:
+    react: 3
+    typescript: 3
+    javascript: 2
+    "next.js": 3
+    nextjs: 3
+    vue: 2
+    tailwind: 2
+    css: 1
+    html: 1
+    graphql: 2
+    "rest api": 1
+    figma: 1
+    storybook: 1
+    webpack: 1
+    vite: 1
+    node: 1
+    jest: 1
+    cypress: 1
+    playwright: 2
+  stack_max_score: 25
+
+  location_preferred:
+    - "worldwide"
+    - "anywhere"
+    - "global"
+    - "europe"
+    - "emea"
+    - "eu"
+    - "germany"
+    - "uk"
+    - "netherlands"
+    - "spain"
+    - "portugal"
+    - "france"
+  location_neutral_regions:
+    - "latam"
+    - "latin america"
+    - "africa"
+    - "oceania"
+  location_excluded:
+    - "united states"
+    - "usa only"
+    - "us only"
+
+  company_high:
+    - "series b"
+    - "series c"
+    - "saas"
+    - "design system"
+    - "fully remote"
+    - "remote-first"
+  company_mid:
+    - "startup"
+    - "scale-up"
+    - "series a"
+    - "e-commerce"
+    - "marketplace"
+    - "remote"
+
+scrapers:
+  enabled:
+    himalayas: true
+    remotive: true
+    weworkremotely: true
+    remoteok: true
+    greenhouse: true
+    remoteco: false

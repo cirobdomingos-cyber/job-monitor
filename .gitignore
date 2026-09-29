@@ -29,3 +29,6 @@ Thumbs.db
 .ruff_cache/
 htmlcov/
 .coverage
+
+*.db
+runner_output.txt

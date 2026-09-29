@@ -4,6 +4,7 @@ from __future__ import annotations
 import pytest
 
 from job_monitor.core.models import Job
+from job_monitor.core.profile import ScoringConfig
 from job_monitor.core.scorer import (
     ScoreBreakdown,
     _detect_currency,
@@ -15,7 +16,47 @@ from job_monitor.core.scorer import (
     _score_salary,
     _to_usd,
     score,
-    STACK_MAX_SCORE,
+)
+
+
+# ---------------------------------------------------------------------------
+# Test scoring config — mirrors the default profile
+# ---------------------------------------------------------------------------
+
+TEST_SCORING = ScoringConfig(
+    salary_min=80_000,
+    salary_max=130_000,
+    seniority_high=["senior", "lead", "staff", "principal", "head of", "director"],
+    seniority_mid=["mid", "ii", "iii", "2", "3", "specialist", "experienced"],
+    stack_keywords={
+        "python": 3, "sql": 3, "dbt": 3, "databricks": 3,
+        "power bi": 3, "powerbi": 3, "analytics": 2,
+        "data modeling": 2, "data model": 2, "snowflake": 2,
+        "bigquery": 2, "spark": 2, "airflow": 2, "looker": 2,
+        "tableau": 2, "redshift": 1, "metabase": 1,
+        "data warehouse": 1, "data platform": 1, "data pipeline": 1,
+        "aws": 1, "gcp": 1, "azure": 1, "kafka": 1,
+        "pyspark": 2, "mlflow": 1, "streamlit": 2, "fastapi": 2,
+    },
+    stack_max_score=25,
+    location_preferred=[
+        "worldwide", "anywhere", "global", "latam", "latin america",
+        "brazil", "brasil", " americas",
+    ],
+    location_neutral_regions=[
+        "europe", "emea", "apac", "asia", "africa", "oceania",
+        "australia", "india", "uk only", "eu only",
+    ],
+    location_excluded=["united states", "usa only", "us only", "north america only"],
+    company_high=[
+        "series b", "series c", "series d", "fintech", "saas", "b2b saas",
+        "fully remote", "remote-first", "distributed team",
+        "data platform", "data infrastructure", "analytics platform",
+    ],
+    company_mid=[
+        "startup", "scale-up", "scaleup", "growth stage", "series a",
+        "financial services", "payments", "e-commerce", "marketplace", "remote",
+    ],
 )
 
 
@@ -44,20 +85,20 @@ def make_job(**overrides) -> Job:
 # ===================================================================
 
 def test_seniority_senior():
-    assert _score_seniority("Senior Data Analyst") == 20
+    assert _score_seniority("Senior Data Analyst", TEST_SCORING) == 20
 
 
 def test_seniority_lead():
-    assert _score_seniority("Lead Analytics Engineer") == 20
+    assert _score_seniority("Lead Analytics Engineer", TEST_SCORING) == 20
 
 
 def test_seniority_specialist():
-    assert _score_seniority("Data Specialist") == 10
+    assert _score_seniority("Data Specialist", TEST_SCORING) == 10
 
 
 def test_seniority_no_indicator():
     """Generic title with no seniority keyword scores lowest tier (6)."""
-    assert _score_seniority("Data Analyst") == 6
+    assert _score_seniority("Data Analyst", TEST_SCORING) == 6
 
 
 # ===================================================================
@@ -67,50 +108,36 @@ def test_seniority_no_indicator():
 def test_stack_all_core_keywords():
     """Description containing python + sql + dbt + databricks should score high."""
     text = "python sql dbt databricks"
-    result = _score_stack(text)
+    result = _score_stack(text, TEST_SCORING)
     # python(3) + sql(3) + dbt(3) + databricks(3) = 12
     assert result == 12
 
 
 def test_stack_single_keyword():
     """A single keyword scores proportionally to its weight."""
-    assert _score_stack("sql") == 3
+    assert _score_stack("sql", TEST_SCORING) == 3
 
 
 def test_stack_no_keywords():
-    assert _score_stack("") == 0
+    assert _score_stack("", TEST_SCORING) == 0
 
 
 def test_stack_tags_counted():
-    """Keywords present in the haystack via tags should be counted.
-
-    This is an integration-level check: score() builds the haystack from all
-    Job fields including tags, so keywords in tags contribute to the stack score.
-    """
+    """Keywords present in the haystack via tags should be counted."""
     job = make_job(
         title="Analyst",
         description="",
         tags=["dbt", "snowflake", "airflow"],
     )
-    result = score(job)
+    result = score(job, TEST_SCORING)
     # Tags are joined and lowered into the haystack -> dbt(3) + snowflake(2) + airflow(2) = 7
     assert result.stack >= 7
 
 
 def test_stack_cap_at_max():
-    """Even with every possible keyword, the score must not exceed STACK_MAX_SCORE (25)."""
-    text = " ".join(
-        kw for kw, _ in [
-            ("python", 3), ("sql", 3), ("dbt", 3), ("databricks", 3),
-            ("power bi", 3), ("analytics", 2), ("data modeling", 2),
-            ("snowflake", 2), ("bigquery", 2), ("spark", 2), ("airflow", 2),
-            ("looker", 2), ("tableau", 2), ("pyspark", 2), ("streamlit", 2),
-            ("fastapi", 2), ("redshift", 1), ("metabase", 1),
-            ("data warehouse", 1), ("data platform", 1), ("data pipeline", 1),
-            ("aws", 1), ("gcp", 1), ("azure", 1), ("kafka", 1), ("mlflow", 1),
-        ]
-    )
-    assert _score_stack(text) == STACK_MAX_SCORE
+    """Even with every possible keyword, the score must not exceed stack_max_score (25)."""
+    text = " ".join(TEST_SCORING.stack_keywords.keys())
+    assert _score_stack(text, TEST_SCORING) == TEST_SCORING.stack_max_score
 
 
 # ===================================================================
@@ -130,11 +157,17 @@ def test_parse_salary_single():
 
 
 def test_parse_salary_with_k():
-    """'$120k' — the parser does NOT handle 'k' shorthand; numbers < 1000
-    are filtered out. This documents current behavior."""
+    """'$120k' is expanded to 120000."""
     lo, hi = _parse_salary("$120k")
-    # 120 < 1000, so it's filtered out
-    assert lo is None
+    assert lo == 120_000
+    assert hi is None
+
+
+def test_parse_salary_range_with_k():
+    """'$80K-$130K' is expanded to a proper range."""
+    lo, hi = _parse_salary("$80K-$130K")
+    assert lo == 80_000
+    assert hi == 130_000
 
 
 def test_parse_salary_none():
@@ -161,24 +194,24 @@ def test_to_usd_eur():
 
 def test_salary_in_target_range():
     """$90k-$120k falls perfectly inside $80k-$130k target -> 20."""
-    assert _score_salary("USD 90000-120000") == 20
+    assert _score_salary("USD 90000-120000", TEST_SCORING) == 20
 
 
 def test_salary_below_minimum():
     """$30k is well below the $80k floor -> low score."""
-    result = _score_salary("USD 30000")
+    result = _score_salary("USD 30000", TEST_SCORING)
     assert result < 8  # worse than unknown
 
 
 def test_salary_above_target():
     """$200k is above the target range but still worth applying -> 12."""
-    assert _score_salary("USD 200000") == 12
+    assert _score_salary("USD 200000", TEST_SCORING) == 12
 
 
 def test_salary_empty():
     """No salary info scores the neutral default of 8."""
-    assert _score_salary("") == 8
-    assert _score_salary(None) == 8
+    assert _score_salary("", TEST_SCORING) == 8
+    assert _score_salary(None, TEST_SCORING) == 8
 
 
 # ===================================================================
@@ -186,21 +219,21 @@ def test_salary_empty():
 # ===================================================================
 
 def test_location_worldwide():
-    assert _score_location("Worldwide", "") == 20
+    assert _score_location("Worldwide", "", TEST_SCORING) == 20
 
 
 def test_location_latam():
-    assert _score_location("LATAM", "") == 20
-    assert _score_location("Latin America", "") == 20
+    assert _score_location("LATAM", "", TEST_SCORING) == 20
+    assert _score_location("Latin America", "", TEST_SCORING) == 20
 
 
 def test_location_remote_generic():
     """'Remote' with no geo restriction scores 14."""
-    assert _score_location("Remote", "") == 14
+    assert _score_location("Remote", "", TEST_SCORING) == 14
 
 
 def test_location_us_only():
-    assert _score_location("US only", "") == 0
+    assert _score_location("US only", "", TEST_SCORING) == 0
 
 
 # ===================================================================
@@ -208,11 +241,11 @@ def test_location_us_only():
 # ===================================================================
 
 def test_company_series_b():
-    assert _score_company("we are a series b fintech startup") >= 3
+    assert _score_company("we are a series b fintech startup", TEST_SCORING) >= 3
 
 
 def test_company_fintech():
-    assert _score_company("leading fintech company") >= 3
+    assert _score_company("leading fintech company", TEST_SCORING) >= 3
 
 
 # ===================================================================
@@ -222,12 +255,12 @@ def test_company_fintech():
 def test_score_returns_total_and_breakdown():
     """score() returns a ScoreBreakdown with total and per-dimension scores."""
     job = make_job()
-    result = score(job)
+    result = score(job, TEST_SCORING)
     assert isinstance(result, ScoreBreakdown)
-    assert result.total == (
-        result.seniority + result.stack + result.salary + result.location + result.company
-    ) or result.total == 100  # could be capped
-    # Verify individual dimensions are populated
+    assert result.total == min(
+        result.seniority + result.stack + result.salary + result.location + result.company,
+        100,
+    )
     assert result.seniority >= 0
     assert result.stack >= 0
     assert result.salary >= 0
@@ -252,8 +285,50 @@ def test_score_total_max_100():
         location="Worldwide",
         tags=["python", "sql", "dbt"],
     )
-    result = score(job)
+    result = score(job, TEST_SCORING)
     assert result.total <= 100
+
+
+# ===================================================================
+# Custom profile test — proves the system is truly configurable
+# ===================================================================
+
+def test_score_with_custom_profile():
+    """A different profile changes what scores high."""
+    frontend_config = ScoringConfig(
+        salary_min=60_000,
+        salary_max=100_000,
+        seniority_high=["senior", "lead"],
+        seniority_mid=["mid"],
+        stack_keywords={"react": 3, "typescript": 3, "css": 1},
+        stack_max_score=25,
+        location_preferred=["europe", "eu", "worldwide"],
+        location_neutral_regions=["latam"],
+        location_excluded=["us only"],
+        company_high=["saas"],
+        company_mid=["startup"],
+    )
+    # A frontend job should score high with the frontend profile
+    frontend_job = make_job(
+        title="Senior Frontend Engineer",
+        description="Build React apps with TypeScript and CSS.",
+        salary="USD 80000",
+        location="Europe",
+    )
+    result = score(frontend_job, frontend_config)
+    assert result.stack >= 7  # react(3) + typescript(3) + css(1)
+    assert result.location == 20  # "europe" is preferred
+
+    # Same job with the data analyst profile should score low on stack
+    frontend_job_no_tags = make_job(
+        title="Senior Frontend Engineer",
+        description="Build React apps with TypeScript and CSS.",
+        salary="USD 80000",
+        location="Europe",
+        tags=[],
+    )
+    data_result = score(frontend_job_no_tags, TEST_SCORING)
+    assert data_result.stack == 0  # no data keywords in description
 
 
 # ===================================================================

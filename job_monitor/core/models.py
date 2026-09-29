@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class Job(BaseModel):
@@ -16,12 +16,10 @@ class Job(BaseModel):
     salary: Optional[str] = None
     tags: list[str] = []
     posted_at: Optional[datetime] = None
-    fetched_at: datetime = None  # set by runner
-
-    @field_validator("fetched_at", mode="before")
-    @classmethod
-    def default_fetched_at(cls, v):
-        return v or datetime.utcnow()
+    fetched_at: datetime = Field(default_factory=datetime.utcnow)
+    # Scoring (populated by runner after filtering)
+    score: Optional[int] = None                   # 0–100
+    score_breakdown: Optional[str] = None         # JSON string of dimension scores
 
     @field_validator("tags", mode="before")
     @classmethod

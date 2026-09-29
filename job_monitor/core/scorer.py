@@ -4,9 +4,9 @@ scorer.py — Score each job 0–100 based on profile fit.
 Dimensions:
   - Title seniority    (0–20)  : Senior/Lead > Mid > Unspecified
   - Tech stack overlap (0–25)  : Count of target stack keywords in description
-  - Salary fit         (0–20)  : $80k–$130k target range
-  - Location compat    (0–20)  : Worldwide/LATAM-friendly > others
-  - Company signals    (0–15)  : Fintech/SaaS/Series B+ language
+  - Salary fit         (0–20)  : Configurable target range
+  - Location compat    (0–20)  : Preferred locations > others
+  - Company signals    (0–15)  : Configurable sector/stage keywords
                        ------
   Total                (0–100)
 """
@@ -17,76 +17,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from job_monitor.core.models import Job
-
-# ---------------------------------------------------------------------------
-# Target profile constants
-# ---------------------------------------------------------------------------
-SALARY_MIN = 80_000
-SALARY_MAX = 130_000
-
-SENIORITY_HIGH = ["senior", "lead", "staff", "principal", "head of", "director"]
-SENIORITY_MID  = ["mid", "ii", "iii", "2", "3", "specialist", "experienced"]
-
-# Your specific stack — weighted by how central they are to your work
-STACK_KEYWORDS: list[tuple[str, int]] = [
-    ("python",          3),
-    ("sql",             3),
-    ("dbt",             3),
-    ("databricks",      3),
-    ("power bi",        3),
-    ("powerbi",         3),
-    ("analytics",       2),
-    ("data modeling",   2),
-    ("data model",      2),
-    ("snowflake",       2),
-    ("bigquery",        2),
-    ("spark",           2),
-    ("airflow",         2),
-    ("looker",          2),
-    ("tableau",         2),
-    ("redshift",        1),
-    ("metabase",        1),
-    ("data warehouse",  1),
-    ("data platform",   1),
-    ("data pipeline",   1),
-    ("aws",             1),
-    ("gcp",             1),
-    ("azure",           1),
-    ("kafka",           1),
-    ("pyspark",         2),
-    ("mlflow",          1),
-    ("streamlit",       2),
-    ("fastapi",         2),
-]
-STACK_MAX_SCORE = 25
-
-# Locations that are Brazil/LATAM-friendly
-LATAM_SIGNALS = [
-    "worldwide", "anywhere", "global", "latam", "latin america",
-    "brazil", "brasil", "argentina", "uruguay", "colombia", "mexico",
-    "chile", "peru", "south america",
-    " americas",   # space-prefixed to avoid matching "America" or "pan-american"
-]
-LATAM_REGIONS = [
-    "europe", "emea", "apac", "asia", "africa", "oceania",
-    "australia", "india", "uk only", "eu only",
-]
-US_SIGNALS = ["united states", "usa only", "us only", "north america only"]
-
-# Company/sector fit signals
-COMPANY_HIGH = [
-    "series b", "series c", "series d", "series e",
-    "fintech", "saas", "b2b saas", "logistics tech", "logistics",
-    "data platform", "data infrastructure", "analytics platform",
-    "fully remote", "fully distributed", "remote-first", "distributed team",
-]
-COMPANY_MID = [
-    "startup", "scale-up", "scaleup", "growth stage",
-    "series a",
-    "financial services", "payments", "insurtech", "proptech",
-    "e-commerce", "marketplace",
-    "remote",
-]
+from job_monitor.core.profile import ScoringConfig
 
 
 @dataclass
@@ -108,14 +39,14 @@ class ScoreBreakdown:
         return "Weak"
 
 
-def score(job: Job) -> ScoreBreakdown:
+def score(job: Job, config: ScoringConfig) -> ScoreBreakdown:
     text = _haystack(job)
 
-    seniority = _score_seniority(job.title)
-    stack     = _score_stack(text)
-    salary    = _score_salary(job.salary)
-    location  = _score_location(job.location, text)
-    company   = _score_company(text)
+    seniority = _score_seniority(job.title, config)
+    stack     = _score_stack(text, config)
+    salary    = _score_salary(job.salary, config)
+    location  = _score_location(job.location, text, config)
+    company   = _score_company(text, config)
 
     total = seniority + stack + salary + location + company
     return ScoreBreakdown(
@@ -132,26 +63,24 @@ def score(job: Job) -> ScoreBreakdown:
 # Individual dimension scorers
 # ---------------------------------------------------------------------------
 
-def _score_seniority(title: str) -> int:
+def _score_seniority(title: str, config: ScoringConfig) -> int:
     t = title.lower()
-    if any(s in t for s in SENIORITY_HIGH):
+    if any(s in t for s in config.seniority_high):
         return 20
-    if any(s in t for s in SENIORITY_MID):
+    if any(s in t for s in config.seniority_mid):
         return 10
     return 6  # unspecified: give slight benefit of doubt
 
 
-def _score_stack(text: str) -> int:
+def _score_stack(text: str, config: ScoringConfig) -> int:
     total = 0
-    for keyword, weight in STACK_KEYWORDS:
+    for keyword, weight in config.stack_keywords.items():
         if keyword in text:
             total += weight
-    # Normalize to STACK_MAX_SCORE
-    # Max possible raw score if all keywords present ~ 50+; cap at 25
-    return min(total, STACK_MAX_SCORE)
+    return min(total, config.stack_max_score)
 
 
-def _score_salary(salary_str: Optional[str]) -> int:
+def _score_salary(salary_str: Optional[str], config: ScoringConfig) -> int:
     if not salary_str:
         return 8  # unknown — neutral, slight penalty vs confirmed range
 
@@ -159,42 +88,44 @@ def _score_salary(salary_str: Optional[str]) -> int:
     if lo is None:
         return 8
 
-    # Convert non-USD rough estimates (GBP/EUR ~1.2x, others ~0.8x)
     currency = _detect_currency(salary_str)
     lo, hi = _to_usd(lo, hi, currency)
 
     mid = (lo + hi) / 2 if hi else lo
 
-    # Perfect overlap with $80k–$130k
-    if SALARY_MIN <= lo and (hi or lo) <= SALARY_MAX:
+    sal_min = config.salary_min
+    sal_max = config.salary_max
+
+    # Perfect overlap with target range
+    if sal_min <= lo and (hi or lo) <= sal_max:
         return 20
     # Mid point is within range
-    if SALARY_MIN <= mid <= SALARY_MAX:
+    if sal_min <= mid <= sal_max:
         return 17
     # Overlaps the range
-    if lo <= SALARY_MAX and (hi or lo) >= SALARY_MIN:
+    if lo <= sal_max and (hi or lo) >= sal_min:
         return 13
     # Too low
-    if (hi or lo) < SALARY_MIN:
-        penalty = (SALARY_MIN - (hi or lo)) / SALARY_MIN
+    if (hi or lo) < sal_min:
+        penalty = (sal_min - (hi or lo)) / sal_min
         return max(0, int(10 * (1 - penalty)))
     # Too high (overqualified risk, but still worth applying)
-    if lo > SALARY_MAX:
+    if lo > sal_max:
         return 12
     return 8
 
 
-def _score_location(location: Optional[str], text: str) -> int:
+def _score_location(location: Optional[str], text: str, config: ScoringConfig) -> int:
     loc = (location or "").lower()
     combined = f"{loc} {text}"
 
-    # Worldwide / LATAM-explicit = best
-    if any(s in combined for s in LATAM_SIGNALS):
+    # Preferred locations = best
+    if any(s in combined for s in config.location_preferred):
         return 20
-    # Clearly not LATAM-compatible
-    if any(s in loc for s in US_SIGNALS):
+    # Clearly excluded
+    if any(s in loc for s in config.location_excluded):
         return 0
-    if any(s in combined for s in LATAM_REGIONS):
+    if any(s in combined for s in config.location_neutral_regions):
         return 8
     # "Remote" with no geo restriction
     if "remote" in loc or "remote" in combined[:200]:
@@ -202,15 +133,15 @@ def _score_location(location: Optional[str], text: str) -> int:
     return 6  # unclear
 
 
-def _score_company(text: str) -> int:
-    score = 0
-    for signal in COMPANY_HIGH:
+def _score_company(text: str, config: ScoringConfig) -> int:
+    total = 0
+    for signal in config.company_high:
         if signal in text:
-            score += 3
-    for signal in COMPANY_MID:
+            total += 3
+    for signal in config.company_mid:
         if signal in text:
-            score += 1
-    return min(score, 15)
+            total += 1
+    return min(total, 15)
 
 
 # ---------------------------------------------------------------------------
@@ -229,11 +160,17 @@ def _haystack(job: Job) -> str:
 
 
 def _parse_salary(s: str) -> tuple[Optional[float], Optional[float]]:
-    """Extract low/high salary numbers from a string like 'USD 80,000–120,000'."""
-    nums = re.findall(r"[\d,]+(?:\.\d+)?", s.replace(",", ""))
-    if not nums:
+    """Extract low/high salary numbers from a string like 'USD 80,000–120,000' or '$120k'."""
+    # Match numbers optionally followed by k/K multiplier
+    tokens = re.findall(r"[\d,]+(?:\.\d+)?[kK]?", s.replace(",", ""))
+    if not tokens:
         return None, None
-    floats = [float(n.replace(",", "")) for n in nums]
+    floats: list[float] = []
+    for tok in tokens:
+        if tok.lower().endswith("k"):
+            floats.append(float(tok[:-1]) * 1000)
+        else:
+            floats.append(float(tok))
     # Treat numbers < 1000 as hourly/monthly shortcuts — skip
     floats = [f for f in floats if f >= 1000]
     if not floats:
